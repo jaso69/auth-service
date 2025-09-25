@@ -16,7 +16,7 @@
     "postgres": "^3.3.4"
   },
   "engines": {
-    "node": ">=18.x"
+    "node": ">=22.x"
   },
   "keywords": ["auth", "vercel", "serverless"],
   "author": "Tu nombre",
