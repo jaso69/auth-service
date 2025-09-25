@@ -1,8 +1,11 @@
-// api/register.js - VERSIÓN CORREGIDA
-console.log('✅ Register.js cargado correctamente');
+import { AuthService } from '../lib/auth.js';
+import { initDB } from '../lib/db.js';
+
+// Inicializar DB al cargar (solo una vez)
+let dbInitialized = false;
 
 export default async function handler(req, res) {
-  console.log('🔍 Register endpoint llamado, método:', req.method);
+  console.log('🔍 Register endpoint llamado');
   
   try {
     // Habilitar CORS
@@ -10,76 +13,47 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    // Manejar preflight OPTIONS
+    // Manejar preflight
     if (req.method === 'OPTIONS') {
-      console.log('✅ Preflight OPTIONS manejado');
       return res.status(200).end();
     }
 
-    // Solo permitir POST
     if (req.method !== 'POST') {
-      console.log('❌ Método no permitido:', req.method);
-      return res.status(405).json({ error: 'Método no permitido. Use POST.' });
+      return res.status(405).json({ error: 'Método no permitido' });
     }
 
-    // Verificar content-type
-    const contentType = req.headers['content-type'];
-    if (!contentType || !contentType.includes('application/json')) {
-      return res.status(400).json({ error: 'Content-Type debe ser application/json' });
+    // Inicializar DB si no está inicializada
+    if (!dbInitialized) {
+      await initDB();
+      dbInitialized = true;
     }
 
-    // Parsear el body
-    let body;
-    try {
-      body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      console.log('📦 Body parseado:', body);
-    } catch (parseError) {
-      console.log('❌ Error parseando JSON:', parseError);
-      return res.status(400).json({ error: 'JSON inválido en el body' });
-    }
-
+    // Parsear body
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     const { email, password, name } = body;
 
-    // Validaciones básicas
-    if (!email || !password) {
-      return res.status(400).json({ 
-        error: 'Email y contraseña requeridos',
-        received: { email: !!email, password: !!password }
-      });
-    }
+    // Usar el servicio real de autenticación
+    const result = await AuthService.register(email, password, { name });
 
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
-    }
+    // Cookie segura
+    res.setHeader('Set-Cookie', [
+      `token=${result.token}; HttpOnly; Path=/; Max-Age=604800; SameSite=Strict; Secure=${process.env.NODE_ENV === 'production'}`
+    ]);
 
-    // ✅ SIMULACIÓN EXITOSA - Sin base de datos por ahora
-    const mockUser = {
-      id: Date.now(),
-      email: email,
-      name: name || 'Usuario',
-      createdAt: new Date().toISOString()
-    };
+    console.log('✅ Usuario registrado correctamente:', email);
 
-    // Token simulado
-    const mockToken = `mock-jwt-token-${Date.now()}`;
-
-    console.log('✅ Registro simulado exitoso para:', email);
-
-    // Respuesta exitosa
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
-      message: 'Usuario registrado exitosamente (modo simulación)',
-      user: mockUser,
-      token: mockToken,
-      note: 'La base de datos se conectará en el siguiente paso'
+      message: 'Usuario registrado correctamente',
+      user: result.user
     });
 
   } catch (error) {
-    console.error('❌ Error inesperado en register:', error);
-    return res.status(500).json({
+    console.error('❌ Error en registro:', error.message);
+    
+    res.status(400).json({ 
       success: false,
-      error: 'Error interno del servidor',
-      details: process.env.NODE_ENV === 'production' ? undefined : error.message
+      error: error.message
     });
   }
 }
