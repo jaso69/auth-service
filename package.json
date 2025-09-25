@@ -1,0 +1,14 @@
+{
+  "name": "mi-auth-service",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "3.0.2",
+    "cookie": "1.0.2",
+    "postgres": "^3.3.4"
+  },
+  "devDependencies": {
+    "@vercel/node": "5.3.24"
+  }
+}
