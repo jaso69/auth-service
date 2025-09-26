@@ -81,7 +81,7 @@ export default async function handler(req, res) {
       // profileImage: user.profile_image,
     };
 
-    console.log('✅ Perfil enviado para:', user.rol);
+    console.log('✅ Perfil enviado para:', user);
 
     res.status(200).json({
       success: true,
