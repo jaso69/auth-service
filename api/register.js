@@ -5,6 +5,7 @@ import { initDB } from '../lib/db.js';
 let dbInitialized = false;
 
 export default async function handler(req, res) {
+  await initDB();
   console.log('🔍 Register endpoint llamado');
   
   try {
@@ -23,8 +24,8 @@ export default async function handler(req, res) {
     }
 
     // Inicializar DB si no está inicializada
-    await initDB();
     if (!dbInitialized) {
+      await initDB();
       dbInitialized = true;
     }
 
