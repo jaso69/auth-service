@@ -1,8 +1,10 @@
+import { initDB } from "../lib/db";
 export default async function handler(req, res) {
   console.log('🔍 Debug endpoint llamado');
   
   try {
     // Respuesta mínima para verificar que funciona
+    initDB()
     return res.status(200).json({
       success: true,
       message: '✅ Debug endpoint funcionando',
