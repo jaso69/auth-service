@@ -23,8 +23,8 @@ export default async function handler(req, res) {
     }
 
     // Inicializar DB si no está inicializada
+    await initDB();
     if (!dbInitialized) {
-      await initDB();
       dbInitialized = true;
     }
 
