@@ -4,7 +4,6 @@ export default async function handler(req, res) {
   
   try {
     // Respuesta mínima para verificar que funciona
-    await initDB()
     return res.status(200).json({
       success: true,
       message: '✅ Debug endpoint funcionando',
