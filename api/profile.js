@@ -84,6 +84,7 @@ export default async function handler(req, res) {
     console.log('✅ Perfil enviado para:', user.email);
 
     res.status(200).json({
+      rol: user.rol,
       success: true,
       message: 'Perfil obtenido correctamente',
       user: userProfile
