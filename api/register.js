@@ -5,7 +5,6 @@ import { initDB } from '../lib/db.js';
 let dbInitialized = false;
 
 export default async function handler(req, res) {
-  await initDB();
   console.log('🔍 Register endpoint llamado');
   
   try {
