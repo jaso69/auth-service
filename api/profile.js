@@ -74,6 +74,7 @@ export default async function handler(req, res) {
       id: user.id,
       email: user.email,
       name: user.name,
+      rol: user.rol,
       createdAt: user.created_at,
       // Puedes agregar más campos según necesites
       // lastLogin: user.last_login,
