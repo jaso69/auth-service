@@ -1,7 +1,7 @@
 import { AuthService } from '../lib/auth.js';
 import { updateUserRole } from '../lib/db.js';
 
-export default async function handler(req, res) {
+export default async function updateRol(req, res) {
     
     // Habilitar CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
