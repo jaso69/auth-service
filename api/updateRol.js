@@ -42,3 +42,5 @@ export default async function updateRol(req, res) {
         res.status(401).json({ error: error.message });
     }
 }
+
+updateRol(req, res)
