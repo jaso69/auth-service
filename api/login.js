@@ -1,7 +1,19 @@
 import { AuthService } from '../lib/auth.js';
 import { initDB } from '../lib/db.js';
 
-let dbInitialized = false;
+// Inicializar DB una vez al cargar el módulo
+let initializationPromise = null;
+
+async function ensureDBInitialized() {
+  if (!initializationPromise) {
+    initializationPromise = initDB().catch(error => {
+      console.error('❌ Error inicializando DB:', error);
+      initializationPromise = null; // Permitir reintento
+      throw error;
+    });
+  }
+  return initializationPromise;
+}
 
 export default async function handler(req, res) {
   console.log('🔍 Login endpoint llamado');
@@ -21,11 +33,8 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Método no permitido' });
     }
 
-    // Inicializar DB si no está inicializada
-    if (!dbInitialized) {
-      await initDB();
-      dbInitialized = true;
-    }
+    // Asegurar que la DB esté inicializada
+    await ensureDBInitialized();
 
     // Parsear body
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
@@ -39,8 +48,9 @@ export default async function handler(req, res) {
     const result = await AuthService.login(email, password);
 
     // Cookie segura
+    const isProduction = process.env.NODE_ENV === 'production';
     res.setHeader('Set-Cookie', [
-      `token=${result.token}; HttpOnly; Path=/; Max-Age=604800; SameSite=Strict; Secure=${process.env.NODE_ENV === 'production'}`
+      `token=${result.token}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax; ${isProduction ? 'Secure;' : ''}`
     ]);
 
     console.log('✅ Login exitoso para:', email);
@@ -48,14 +58,19 @@ export default async function handler(req, res) {
     res.status(200).json({
       success: true,
       message: 'Login exitoso',
-      user: result.user,
-      token: result.token // Para que lo veas en la respuesta
+      user: result.user
+      // No enviar el token en el JSON si ya está en la cookie
     });
 
   } catch (error) {
     console.error('❌ Error en login:', error.message);
     
-    res.status(401).json({ 
+    let statusCode = 401;
+    if (error.message.includes('requeridos')) {
+      statusCode = 400;
+    }
+    
+    res.status(statusCode).json({ 
       success: false,
       error: error.message
     });
