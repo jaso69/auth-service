@@ -1,5 +1,8 @@
 import { AuthService } from '../lib/auth.js';
-import { updateUserRole } from '../lib/db.js';
+import { updateUserRole, initDB } from '../lib/db.js';
+
+// Inicializar DB una vez al cargar el módulo
+await initDB().catch(console.error);
 
 export default async function handler(req, res) {
     // Habilitar CORS
@@ -17,28 +20,62 @@ export default async function handler(req, res) {
     }
     
     try {
-        const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
-        console.log('Token recibido:', token);
+        const token = req.headers.authorization?.replace('Bearer ', '') || 
+                     req.cookies?.token;
+        
+        console.log('🔐 Endpoint updateRol llamado');
+        
         if (!token) {
             return res.status(401).json({ error: 'Token no proporcionado' });
         }
         
+        // Verificar usuario
         const user = await AuthService.verifyAndExtractUser(token);
-        console.log('user id:', user.id);
+        console.log('👤 Usuario autenticado:', user.email);
         
-        if (!user) {
-            return res.status(401).json({ error: 'Token inválido' });
+        // Validar que el usuario tenga permisos para cambiar roles
+        if (user.rol !== 'admin') {
+            return res.status(403).json({ error: 'No tienes permisos para cambiar roles' });
         }
 
+        // Parsear body
         const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-        const { rol } = body;
+        const { userId, newRol } = body;
 
+        if (!userId || !newRol) {
+            return res.status(400).json({ error: 'userId y newRol son requeridos' });
+        }
 
-        const updateRole = await updateUserRole(user.id, rol);
+        // Validar rol permitido
+        const allowedRoles = ['guest', 'user', 'moderator', 'admin'];
+        if (!allowedRoles.includes(newRol)) {
+            return res.status(400).json({ error: 'Rol no válido' });
+        }
 
-        res.status(200).json({ updateRole });
+        console.log(`🔄 Actualizando rol de usuario ${userId} a ${newRol}`);
+        
+        // Actualizar rol
+        const updatedUser = await updateUserRole(userId, newRol);
+        
+        console.log('✅ Rol actualizado correctamente');
+        
+        res.status(200).json({ 
+            success: true, 
+            message: 'Rol actualizado correctamente',
+            user: updatedUser 
+        });
 
     } catch (error) {
-        res.status(401).json({ error: error.message });
+        console.error('❌ Error en updateRol:', error.message);
+        
+        if (error.message.includes('Token inválido')) {
+            return res.status(401).json({ error: 'Token inválido o expirado' });
+        }
+        
+        if (error.message.includes('no encontrado')) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+        
+        res.status(500).json({ error: 'Error interno del servidor' });
     }
 }
