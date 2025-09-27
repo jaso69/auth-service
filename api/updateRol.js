@@ -2,12 +2,13 @@ import { AuthService } from '../lib/auth.js';
 import { updateUserRole } from '../lib/db.js';
 
 export default async function handler(req, res) {
-    // Headers CORS
+    // Headers CORS más permisivos para debugging
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
     
     if (req.method === 'OPTIONS') {
+        console.log('🔄 Preflight OPTIONS recibido');
         return res.status(200).end();
     }
     
@@ -17,24 +18,35 @@ export default async function handler(req, res) {
     
     try {
         console.log('🔧 Endpoint updateRol llamado');
+        console.log('📨 Headers recibidos:', req.headers);
         
-        // Extraer token
+        // Extraer token de múltiples formas
+        let token = null;
         const authHeader = req.headers.authorization;
-        const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
         
-        if (!token) {
-            return res.status(401).json({ error: 'Token no proporcionado' });
+        if (authHeader?.startsWith('Bearer ')) {
+            token = authHeader.substring(7);
+        } else if (authHeader) {
+            token = authHeader; // Por si acaso viene sin 'Bearer '
         }
         
-        // 🔥 Verificar usuario y extraer su ID del token
-        const user = await AuthService.verifyAndExtractUser(token);
-        console.log('Usuario autenticado:', user.email, '- Rol actual:', user.rol);
+        console.log('🔐 Token recibido:', token ? `Sí (longitud: ${token.length})` : 'No');
         
-        // Parsear body - ahora solo necesita el rol
+        if (!token) {
+            console.log('❌ Token no proporcionado en headers');
+            return res.status(401).json({ error: 'Token no proporcionado' });
+        }
+
+        // Verificar usuario
+        console.log('🔍 Verificando token...');
+        const user = await AuthService.verifyAndExtractUser(token);
+        console.log('✅ Usuario verificado:', user.email);
+        
+        // Parsear body
         const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
         const { rol } = body;
 
-        console.log('Nuevo rol solicitado:', rol);
+        console.log('📝 Body recibido:', body);
 
         if (!rol) {
             return res.status(400).json({ error: 'Rol requerido' });
@@ -46,7 +58,7 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: `Rol no válido` });
         }
 
-        // 🔥 Usar el ID del usuario autenticado (del token)
+        // Usar el ID del usuario autenticado
         const userId = user.id;
         console.log(`🔄 Actualizando rol del usuario ${userId} a ${rol}`);
         
@@ -63,11 +75,16 @@ export default async function handler(req, res) {
 
     } catch (error) {
         console.error('❌ Error en updateRol:', error.message);
+        console.error('🔍 Stack trace:', error.stack);
         
-        if (error.message.includes('Token inválido')) {
+        if (error.message.includes('Token inválido') || error.message.includes('jwt')) {
             return res.status(401).json({ error: 'Token inválido o expirado' });
         }
         
-        res.status(500).json({ error: 'Error interno del servidor' });
+        if (error.message.includes('no encontrado')) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+        
+        res.status(500).json({ error: 'Error interno del servidor: ' + error.message });
     }
 }
