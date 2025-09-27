@@ -1,17 +1,16 @@
 import { AuthService } from '../lib/auth.js';
-import { updateUserRole, initDB } from '../lib/db.js';
-
-// Inicializar DB una vez al cargar el módulo
-await initDB().catch(console.error);
+import { updateUserRole } from '../lib/db.js';
 
 export default async function handler(req, res) {
-    // Habilitar CORS
+    // 🔥 CORREGIR: Headers CORS más completos
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET, PUT, DELETE');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Max-Age', '86400'); // Cache preflight por 24 horas
     
-    // Manejar preflight
+    // Manejar preflight OPTIONS
     if (req.method === 'OPTIONS') {
+        console.log('🔄 Preflight OPTIONS recibido');
         return res.status(200).end();
     }
     
@@ -20,10 +19,13 @@ export default async function handler(req, res) {
     }
     
     try {
-        const token = req.headers.authorization?.replace('Bearer ', '') || 
-                     req.cookies?.token;
+        console.log('🔧 Endpoint updateRol llamado');
         
-        console.log('🔐 Endpoint updateRol llamado');
+        // 🔥 EXTRAER TOKEN CORRECTAMENTE
+        const authHeader = req.headers.authorization;
+        const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+        
+        console.log('Token recibido:', token ? '✓' : '✗');
         
         if (!token) {
             return res.status(401).json({ error: 'Token no proporcionado' });
@@ -31,31 +33,37 @@ export default async function handler(req, res) {
         
         // Verificar usuario
         const user = await AuthService.verifyAndExtractUser(token);
-        console.log('👤 Usuario autenticado:', user.email);
+        console.log('Usuario autenticado:', user.email, '- Rol:', user.rol);
         
-        // Validar que el usuario tenga permisos para cambiar roles
+        // 🔥 VALIDAR PERMISOS - Solo admin puede cambiar roles
         if (user.rol !== 'admin') {
-            return res.status(403).json({ error: 'No tienes permisos para cambiar roles' });
+            return res.status(403).json({ error: 'No tienes permisos para cambiar roles. Se requiere rol admin.' });
         }
 
         // Parsear body
         const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-        const { userId, newRol } = body;
+        const { userId, rol } = body;
 
-        if (!userId || !newRol) {
-            return res.status(400).json({ error: 'userId y newRol son requeridos' });
+        console.log('Datos recibidos:', { userId, rol });
+
+        if (!userId || !rol) {
+            return res.status(400).json({ 
+                error: 'Datos incompletos. Se requiere userId y rol' 
+            });
         }
 
         // Validar rol permitido
         const allowedRoles = ['guest', 'user', 'moderator', 'admin'];
-        if (!allowedRoles.includes(newRol)) {
-            return res.status(400).json({ error: 'Rol no válido' });
+        if (!allowedRoles.includes(rol)) {
+            return res.status(400).json({ 
+                error: `Rol no válido. Roles permitidos: ${allowedRoles.join(', ')}` 
+            });
         }
 
-        console.log(`🔄 Actualizando rol de usuario ${userId} a ${newRol}`);
+        console.log(`🔄 Actualizando rol del usuario ${userId} a ${rol}`);
         
         // Actualizar rol
-        const updatedUser = await updateUserRole(userId, newRol);
+        const updatedUser = await updateUserRole(userId, rol);
         
         console.log('✅ Rol actualizado correctamente');
         
@@ -76,6 +84,10 @@ export default async function handler(req, res) {
             return res.status(404).json({ error: 'Usuario no encontrado' });
         }
         
-        res.status(500).json({ error: 'Error interno del servidor' });
+        if (error.message.includes('única')) {
+            return res.status(409).json({ error: 'Violación de constraint única' });
+        }
+        
+        res.status(500).json({ error: 'Error interno del servidor: ' + error.message });
     }
 }
