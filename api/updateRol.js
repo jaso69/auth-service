@@ -1,5 +1,5 @@
 import { AuthService } from '../lib/auth.js';
-import { updateUserRole } from '../lib/db.js';
+import { updateUserRole, findUserByEmail } from '../lib/db.js';
 
 export default async function handler(req, res) {
     // Headers CORS más permisivos para debugging
@@ -44,7 +44,7 @@ export default async function handler(req, res) {
         
         // Parsear body
         const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-        const { rol } = body;
+        const { rol, email } = body;
 
         console.log('📝 Body recibido:', body);
 
@@ -58,8 +58,17 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: `Rol no válido` });
         }
 
+        if (!email){
+            return res.status(400).json({ error: 'Email requerido' });
+        }
+
+        const userToUpdate = await findUserByEmail(email);
+        if (!userToUpdate) {
+            return res.status(404).json({ error: 'Usuario a actualizar no encontrado' });
+        }
+
         // Usar el ID del usuario autenticado
-        const userId = user.id;
+        const userId = userToUpdate.id;
         console.log(`🔄 Actualizando rol del usuario ${userId} a ${rol}`);
         
         // Actualizar rol
