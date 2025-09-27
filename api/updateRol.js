@@ -30,7 +30,11 @@ export default async function handler(req, res) {
             return res.status(401).json({ error: 'Token inválido' });
         }
 
-        const updateRole = await updateUserRole(user.id, 'admin');
+        const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+        const { rol } = body;
+
+
+        const updateRole = await updateUserRole(user.id, rol);
 
         res.status(200).json({ updateRole });
 
