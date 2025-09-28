@@ -1,5 +1,6 @@
 import { AuthService } from '../lib/auth.js';
 import { initDB } from '../lib/db.js';
+import { EmailService } from '../lib/email.js';
 
 // Inicializar DB una vez al cargar el módulo
 let initializationPromise = null;
@@ -50,6 +51,15 @@ export default async function handler(req, res) {
 
     // Usar el servicio de autenticación
     const result = await AuthService.register(email, password, { name });
+
+    EmailService.sendVerificationEmail(email, result.verificationToken, name)
+      .then(() => {
+        console.log('✅ Email de verificación enviado exitosamente');
+      })
+      .catch(error => {
+        console.error('❌ Error enviando email de verificación:', error);
+        // No falla el registro si el email falla
+      });
 
     // Cookie segura
     const isProduction = process.env.NODE_ENV === 'production';

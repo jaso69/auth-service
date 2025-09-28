@@ -10,15 +10,20 @@
   },
   "dependencies": {
     "@vercel/node": "^5.3.24",
-    "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^3.0.2",
     "cookie": "^1.0.2",
-    "postgres": "^3.3.4"
+    "jsonwebtoken": "^9.0.2",
+    "postgres": "^3.3.4",
+    "resend": "^6.1.0"
   },
   "engines": {
     "node": ">=22.x"
   },
-  "keywords": ["auth", "vercel", "serverless"],
+  "keywords": [
+    "auth",
+    "vercel",
+    "serverless"
+  ],
   "author": "Tu nombre",
   "license": "MIT"
 }
