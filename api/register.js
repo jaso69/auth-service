@@ -52,7 +52,10 @@ export default async function handler(req, res) {
     // Usar el servicio de autenticación
     const result = await AuthService.register(email, password, { name });
 
-    EmailService.sendVerificationEmail(email, result.verificationToken, name)
+    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+
+
+    EmailService.sendVerificationEmail(email, result.verificationToken, name, codigo)
       .then(() => {
         console.log('✅ Email de verificación enviado exitosamente');
       })
