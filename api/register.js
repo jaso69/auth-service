@@ -61,6 +61,8 @@ export default async function handler(req, res) {
         // No falla el registro si el email falla
       });
 
+    console.log('✅ Registro exitoso para:', email);
+
     // Cookie segura
     const isProduction = process.env.NODE_ENV === 'production';
     res.setHeader('Set-Cookie', [
@@ -72,7 +74,9 @@ export default async function handler(req, res) {
     res.status(201).json({
       success: true,
       message: 'Usuario registrado exitosamente',
-      user: result.user
+      user: result.user,
+      token: result.token,
+      emailSent: true
     });
 
   } catch (error) {
