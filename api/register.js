@@ -58,6 +58,16 @@ export default async function handler(req, res) {
       verificationCode: result.verificationCode, // 👈 Este es el código correcto
       name: name
     });
+    console.log('🔍 Resultado del registro:', {
+      tieneUser: !!result.user,
+      tieneToken: !!result.token,
+      tieneVerificationCode: !!result.verificationCode,
+      verificationCode: result.verificationCode
+    });
+
+    // 👇 Asegúrate de que esta parte se ejecuta
+    console.log('📧 PREPARANDO envío de email...');
+
 
     // 👇 CORREGIR: Enviar el código correcto
     EmailService.sendVerificationEmail(email, result.verificationCode, name)
@@ -68,7 +78,7 @@ export default async function handler(req, res) {
         console.error('❌ Error enviando email de verificación:', error);
         // No falla el registro si el email falla
       });
-
+      console.log('📧 Email function llamada (continuando...)');
     // Cookie segura
     const isProduction = process.env.NODE_ENV === 'production';
     res.setHeader('Set-Cookie', [
