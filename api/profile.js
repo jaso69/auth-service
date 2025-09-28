@@ -18,26 +18,13 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Método no permitido' });
     }
 
-    // Obtener token de diferentes fuentes
-    let token = null;
-    
-    // 1. De las cookies (si viene del navegador)
-    if (req.cookies?.token) {
-      token = req.cookies.token;
-      console.log('🔑 Token obtenido de cookies');
-    }
-    // 2. Del header Authorization (si viene de API calls)
-    else if (req.headers.authorization) {
-      const authHeader = req.headers.authorization;
-      if (authHeader.startsWith('Bearer ')) {
-        token = authHeader.substring(7); // Quitar "Bearer "
-      } else {
-        token = authHeader;
-      }
-      console.log('🔑 Token obtenido de Authorization header');
-    }
+    // Obtener token
+    let token = req.cookies?.token || 
+                (req.headers.authorization?.startsWith('Bearer ') 
+                  ? req.headers.authorization.substring(7) 
+                  : req.headers.authorization);
 
-    console.log('🔑 Token recibido:', token ? `${token.substring(0, 20)}...` : 'NO');
+    console.log('🔑 Token recibido:', token ? `${token.substring(0, 20)}...` : 'NO TOKEN');
 
     if (!token) {
       return res.status(401).json({ 
@@ -46,19 +33,23 @@ export default async function handler(req, res) {
       });
     }
 
-    // Usar AuthService para verificar el token
+    // 👇 DEBUG EXTENDIDO
+    console.log('🔧 Llamando a AuthService.verifyAndExtractUser...');
     const user = await AuthService.verifyAndExtractUser(token);
+    console.log('✅ AuthService retornó:', user ? `usuario ${user.email}` : 'NULL');
     
-    console.log('✅ Usuario verificado:', user.email);
+    if (!user) {
+      throw new Error('Usuario es null después de verifyAndExtractUser');
+    }
 
-    // 👇 CORREGIR: Usar los nombres correctos de la base de datos
+    // Perfil simplificado - solo lo esencial
     const userProfile = {
       id: user.id,
       email: user.email,
       name: user.name,
       rol: user.rol,
-      createdAt: user.created_at,    // ✅ snake_case
-      isVerified: user.is_verified   // ✅ snake_case
+      isVerified: user.is_verified,  // ✅ Usar snake_case del objeto user
+      createdAt: user.created_at     // ✅ Usar snake_case del objeto user
     };
 
     console.log('✅ Perfil enviado para:', user.email);
@@ -70,18 +61,12 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('❌ Error en profile endpoint:', error.message);
+    console.error('❌ Error COMPLETO en profile endpoint:', error);
+    console.error('❌ Stack:', error.stack);
     
-    if (error.message.includes('Token inválido') || error.message.includes('jwt') || error.message.includes('Usuario no encontrado')) {
-      return res.status(401).json({ 
-        success: false,
-        error: 'Token inválido o expirado' 
-      });
-    }
-    
-    res.status(500).json({ 
+    res.status(401).json({ 
       success: false,
-      error: 'Error interno del servidor' 
+      error: 'Error de autenticación' 
     });
   }
 }
