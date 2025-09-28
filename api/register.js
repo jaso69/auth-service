@@ -52,40 +52,24 @@ export default async function handler(req, res) {
     // Usar el servicio de autenticación
     const result = await AuthService.register(email, password, { name });
 
-    // 👇 CORREGIR: Usar el código que ya generó AuthService
-    console.log('🔍 DEBUG - Resultado completo del registro:');
-    console.log('🔍 result:', JSON.stringify(result, null, 2));
-    console.log('🔍 verificationCode existe?:', !!result.verificationCode);
-    console.log('🔍 verificationCode valor:', result.verificationCode);
-    // Solo enviar email si verificationCode existe
+    // 👇 VERIFICAR QUÉ TIENE RESULT
+    console.log('🔍 DEBUG - Result keys:', Object.keys(result));
+    console.log('🔍 DEBUG - verificationCode:', result.verificationCode);
+
+    // 👇 CORREGIR: Usar verificationCode (no verificationToken) y solo 3 parámetros
     if (result.verificationCode) {
       console.log('📧 Enviando email con código:', result.verificationCode);
-      
       EmailService.sendVerificationEmail(email, result.verificationCode, name)
         .then(() => {
           console.log('✅ Email de verificación enviado exitosamente');
         })
         .catch(error => {
-          console.error('❌ Error enviando email:', error.message);
+          console.error('❌ Error enviando email de verificación:', error);
         });
     } else {
-      console.error('❌ NO HAY verificationCode - No se puede enviar email');
-      console.error('❌ Result keys:', Object.keys(result));
+      console.error('❌ NO HAY verificationCode EN EL RESULTADO');
     }
-    // 👇 Asegúrate de que esta parte se ejecuta
-    console.log('📧 PREPARANDO envío de email...');
 
-
-    // 👇 CORREGIR: Enviar el código correcto
-    EmailService.sendVerificationEmail(email, result.verificationCode, name)
-      .then(() => {
-        console.log('✅ Email de verificación enviado exitosamente');
-      })
-      .catch(error => {
-        console.error('❌ Error enviando email de verificación:', error);
-        // No falla el registro si el email falla
-      });
-      console.log('📧 Email function llamada (continuando...)');
     // Cookie segura
     const isProduction = process.env.NODE_ENV === 'production';
     res.setHeader('Set-Cookie', [
@@ -96,7 +80,7 @@ export default async function handler(req, res) {
 
     res.status(201).json({
       success: true,
-      message: 'Usuario registrado exitosamente. Te hemos enviado un email con el código de verificación.',
+      message: 'Usuario registrado exitosamente',
       user: result.user,
       token: result.token,
       emailSent: true
