@@ -52,10 +52,15 @@ export default async function handler(req, res) {
     // Usar el servicio de autenticación
     const result = await AuthService.register(email, password, { name });
 
-    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+    // 👇 CORREGIR: Usar el código que ya generó AuthService
+    console.log('📧 Datos para email:', {
+      email: email,
+      verificationCode: result.verificationCode, // 👈 Este es el código correcto
+      name: name
+    });
 
-
-    EmailService.sendVerificationEmail(email, result.verificationToken, name, codigo)
+    // 👇 CORREGIR: Enviar el código correcto
+    EmailService.sendVerificationEmail(email, result.verificationCode, name)
       .then(() => {
         console.log('✅ Email de verificación enviado exitosamente');
       })
@@ -63,8 +68,6 @@ export default async function handler(req, res) {
         console.error('❌ Error enviando email de verificación:', error);
         // No falla el registro si el email falla
       });
-
-    console.log('✅ Registro exitoso para:', email);
 
     // Cookie segura
     const isProduction = process.env.NODE_ENV === 'production';
@@ -76,7 +79,7 @@ export default async function handler(req, res) {
 
     res.status(201).json({
       success: true,
-      message: 'Usuario registrado exitosamente',
+      message: 'Usuario registrado exitosamente. Te hemos enviado un email con el código de verificación.',
       user: result.user,
       token: result.token,
       emailSent: true
