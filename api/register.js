@@ -74,7 +74,8 @@ export default async function handler(req, res) {
       message: 'Usuario registrado exitosamente',
       user: result.user,
       token: result.token,
-      emailSent: emailSent
+      emailSent: emailSent,
+      email: email 
     });
 
   } catch (error) {
