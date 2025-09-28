@@ -36,11 +36,6 @@ export default async function handler(req, res) {
       }
       console.log('🔑 Token obtenido de Authorization header');
     }
-    // 3. Del query string (para testing)
-    else if (req.query?.token) {
-      token = req.query.token;
-      console.log('🔑 Token obtenido de query string');
-    }
 
     console.log('🔑 Token recibido:', token ? `${token.substring(0, 20)}...` : 'NO');
 
@@ -51,19 +46,19 @@ export default async function handler(req, res) {
       });
     }
 
-    // 👇 CAMBIO IMPORTANTE: Usar AuthService en lugar de verifyToken directamente
+    // Usar AuthService para verificar el token
     const user = await AuthService.verifyAndExtractUser(token);
     
     console.log('✅ Usuario verificado:', user.email);
 
-    // Devolver información del perfil (sin datos sensibles)
+    // 👇 CORREGIR: Usar los nombres correctos de la base de datos
     const userProfile = {
       id: user.id,
       email: user.email,
       name: user.name,
       rol: user.rol,
-      createdAt: user.createdAt,
-      isVerified: user.isVerified
+      createdAt: user.created_at,    // ✅ snake_case
+      isVerified: user.is_verified   // ✅ snake_case
     };
 
     console.log('✅ Perfil enviado para:', user.email);
@@ -77,7 +72,7 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('❌ Error en profile endpoint:', error.message);
     
-    if (error.message.includes('Token inválido') || error.message.includes('jwt')) {
+    if (error.message.includes('Token inválido') || error.message.includes('jwt') || error.message.includes('Usuario no encontrado')) {
       return res.status(401).json({ 
         success: false,
         error: 'Token inválido o expirado' 
