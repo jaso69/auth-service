@@ -9,6 +9,8 @@
     "start": "vercel start"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.899.0",
+    "@aws-sdk/s3-request-presigner": "^3.899.0",
     "@vercel/node": "^5.3.24",
     "bcryptjs": "^3.0.2",
     "cookie": "^1.0.2",
