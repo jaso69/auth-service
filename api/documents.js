@@ -7,7 +7,7 @@ import {
   searchDocuments,
   initDocumentsTable 
 } from '../lib/db.js';
-import { verifyToken } from '../utils/auth.js';
+import { verifyToken } from '../lib/auth.js';
 
 export default async function handler(req, res) {
   // Configurar CORS
