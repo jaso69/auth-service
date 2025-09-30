@@ -7,7 +7,7 @@ import {
   searchDocuments,
   initDocumentsTable 
 } from '../lib/db.js';
-import { verifyToken } from '../lib/auth.js';
+import { AuthService } from '../lib/auth.js';
 
 export default async function handler(req, res) {
   // Configurar CORS
@@ -30,7 +30,7 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Token de autenticación requerido' });
     }
 
-    const user = await verifyToken(token);
+    const user = await AuthService.verifyAndExtractUser(token);
     if (!user) {
       return res.status(401).json({ error: 'Token inválido' });
     }
