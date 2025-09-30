@@ -1,4 +1,4 @@
-// api/documents.js
+// api/documents.js - VERSIÓN COMPLETA CON SUBIDA DE ARCHIVOS
 import { 
   getAllDocuments, 
   createDocument, 
@@ -8,6 +8,14 @@ import {
   initDocumentsTable 
 } from '../lib/db.js';
 import { AuthService } from '../lib/auth.js';
+import { R2Client } from '../lib/r2-client.js';
+
+// Para Vercel, necesitamos un enfoque diferente para FormData
+export const config = {
+  api: {
+    bodyParser: false, // Desactivar el bodyParser por defecto
+  },
+};
 
 export default async function handler(req, res) {
   // Configurar CORS
@@ -18,10 +26,6 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-
-  if (req.method !== 'POST') {
-      return res.status(405).json({ error: 'Método no permitido' });
-    }
 
   try {
     // Verificar autenticación
@@ -51,23 +55,67 @@ export default async function handler(req, res) {
       }
     }
 
-    // 👇 POST - Crear nuevo documento
+    // 👇 POST - Crear nuevo documento CON ARCHIVO
     if (req.method === 'POST') {
-      const documentData = {
-        ...req.body,
-        uploaded_by: user.id // Asignar el usuario que sube el documento
-      };
+      // Manejar FormData manualmente
+      const formData = await parseFormData(req);
+      
+      if (!formData.file) {
+        return res.status(400).json({ error: 'Archivo requerido' });
+      }
+
+      // Parsear los datos del documento
+      let documentData;
+      try {
+        documentData = JSON.parse(formData.document);
+      } catch (error) {
+        return res.status(400).json({ error: 'Formato de datos inválido' });
+      }
 
       // Validaciones básicas
       if (!documentData.name || !documentData.brand || !documentData.model) {
         return res.status(400).json({ error: 'Nombre, marca y modelo son obligatorios' });
       }
 
-      const newDocument = await createDocument(documentData);
-      return res.status(201).json({ success: true, document: newDocument });
+      // Validar tipo de archivo
+      const allowedTypes = ['application/pdf', 'application/msword', 
+                           'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      if (!allowedTypes.includes(formData.file.type)) {
+        return res.status(400).json({ error: 'Tipo de archivo no permitido. Solo PDF, DOC y DOCX.' });
+      }
+
+      // Validar tamaño (250MB máximo)
+      if (formData.file.size > 250 * 1024 * 1024) {
+        return res.status(400).json({ error: 'Archivo demasiado grande (máximo 250MB)' });
+      }
+
+      try {
+        // 1. Subir archivo a R2
+        const fileUrl = await R2Client.uploadDocument(formData.file, Date.now().toString());
+
+        // 2. Crear documento en la base de datos
+        const newDocument = await createDocument({
+          ...documentData,
+          file_name: formData.file.name,
+          file_url: fileUrl,
+          file_size: formData.file.size,
+          file_type: formData.file.type,
+          uploaded_by: user.id
+        });
+
+        return res.status(201).json({ 
+          success: true, 
+          document: newDocument,
+          message: 'Documento subido exitosamente a Cloudflare R2'
+        });
+
+      } catch (uploadError) {
+        console.error('Error subiendo a R2:', uploadError);
+        return res.status(500).json({ error: 'Error al subir el archivo: ' + uploadError.message });
+      }
     }
 
-    // 👇 PUT - Actualizar documento
+    // 👇 PUT - Actualizar documento (solo metadata, sin archivo)
     if (req.method === 'PUT') {
       const { id, ...updates } = req.body;
       
@@ -97,4 +145,67 @@ export default async function handler(req, res) {
     console.error('Error en endpoint documents:', error);
     return res.status(500).json({ error: error.message });
   }
+}
+
+// Función para parsear FormData en Vercel
+async function parseFormData(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let body = '';
+
+    req.on('data', chunk => {
+      chunks.push(chunk);
+      body += chunk.toString();
+    });
+
+    req.on('end', () => {
+      try {
+        // Parsear el boundary del Content-Type
+        const contentType = req.headers['content-type'];
+        const boundary = contentType.split('boundary=')[1];
+        
+        if (!boundary) {
+          reject(new Error('No boundary found in Content-Type'));
+          return;
+        }
+
+        // Parsear manualmente el FormData
+        const parts = body.split(`--${boundary}`);
+        const result = {};
+
+        for (const part of parts) {
+          if (part.includes('Content-Disposition')) {
+            const nameMatch = part.match(/name="([^"]+)"/);
+            const filenameMatch = part.match(/filename="([^"]+)"/);
+            const contentTypeMatch = part.match(/Content-Type:\s*([^\r\n]+)/);
+
+            if (nameMatch) {
+              const name = nameMatch[1];
+              const value = part.split('\r\n\r\n')[1]?.split('\r\n--')[0]?.trim();
+
+              if (filenameMatch) {
+                // Es un archivo
+                const filename = filenameMatch[1];
+                result.file = {
+                  name: filename,
+                  type: contentTypeMatch ? contentTypeMatch[1] : 'application/octet-stream',
+                  size: Buffer.from(value).length,
+                  buffer: Buffer.from(value)
+                };
+              } else {
+                // Es un campo normal
+                result[name] = value;
+              }
+            }
+          }
+        }
+
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    req.on('error', reject);
+  });
 }
