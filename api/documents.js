@@ -92,12 +92,13 @@ export default async function handler(req, res) {
       try {
         // 1. Subir archivo a R2
         const fileUrl = await R2Client.uploadDocument(formData.file, Date.now().toString());
+        const url = fileUrl.url
 
         // 2. Crear documento en la base de datos
         const newDocument = await createDocument({
           ...documentData,
           file_name: formData.file.name,
-          file_url: fileUrl,
+          file_url: url,
           file_size: formData.file.size,
           file_type: formData.file.type,
           uploaded_by: user.id
@@ -209,3 +210,4 @@ async function parseFormData(req) {
     req.on('error', reject);
   });
 }
+
