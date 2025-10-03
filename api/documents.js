@@ -55,6 +55,29 @@ export default async function handler(req, res) {
       }
     }
 
+    // En api/documents.js - Añade este endpoint
+  if (req.method === 'GET' && req.query.download) {
+      const { key } = req.query;
+      
+      if (!key) {
+          return res.status(400).json({ error: 'Key del archivo requerida' });
+      }
+
+      try {
+          const downloadResult = await R2Client.generateDownloadURL(key);
+          
+          if (downloadResult.success) {
+              // Redirigir directamente a la URL firmada
+              res.redirect(downloadResult.signedUrl);
+          } else {
+              res.status(500).json({ error: 'Error generando URL de descarga' });
+          }
+      } catch (error) {
+          console.error('Error generating download URL:', error);
+          res.status(500).json({ error: error.message });
+      }
+  }
+
     // 👇 POST - Crear nuevo documento CON ARCHIVO
     if (req.method === 'POST') {
       // Manejar FormData manualmente
