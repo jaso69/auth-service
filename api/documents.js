@@ -41,62 +41,68 @@ export default async function handler(req, res) {
     // 👇 GET - Múltiples funcionalidades
     if (req.method === 'GET') {
       // 1. Generar URL firmada para descarga
-      if (req.query.download && req.query.documentId) {
-        const { documentId } = req.query;
-        
-        if (!documentId) {
-          return res.status(400).json({ error: 'ID del documento requerido' });
-        }
+      // En tu documents.js - REEMPLAZA el endpoint de descarga con esto:
 
-        try {
-          // Obtener el documento de la base de datos
-          const document = await db.query(
-            `SELECT * FROM documents WHERE id = $1`,
-            [documentId]
-          );
+// 👇 GET - Generar URL firmada para descarga
+if (req.method === 'GET' && req.query.download && req.query.documentId) {
+  const { documentId } = req.query;
+  
+  if (!documentId) {
+    return res.status(400).json({ error: 'ID del documento requerido' });
+  }
 
-          if (document.rows.length === 0) {
-            return res.status(404).json({ error: 'Documento no encontrado' });
-          }
+  try {
+    console.log('🔍 Buscando documento para descarga:', documentId);
+    
+    // Obtener TODOS los documentos (usa tu función existente)
+    const documents = await getAllDocuments();
+    
+    // Buscar el documento específico
+    const doc = documents.find(d => d.id === documentId);
+    
+    if (!doc) {
+      console.log('❌ Documento no encontrado:', documentId);
+      return res.status(404).json({ error: 'Documento no encontrado' });
+    }
 
-          const docData = document.rows[0];
-          
-          // VERIFICAR: ¿Qué hay realmente en file_url?
-          console.log('🔍 file_url en base de datos:', docData.file_url);
-          console.log('🔍 Tipo de file_url:', typeof docData.file_url);
-          
-          // Extraer la key del file_url - MANERA ROBUSTA
-          let key;
-          if (typeof docData.file_url === 'string') {
-            // Si es string, extraer la key
-            const fileUrl = docData.file_url;
-            key = fileUrl.replace(`https://pub-${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.dev/`, '');
-          } else {
-            // Si es objeto, intentar extraer de diferentes formas
-            console.error('❌ file_url NO es string:', docData.file_url);
-            return res.status(500).json({ error: 'Formato de URL inválido en base de datos' });
-          }
-          
-          console.log('🔑 Key extraída:', key);
-          
-          // Generar URL firmada para descarga
-          const downloadResult = await R2Client.generateDownloadURL(key);
-          
-          if (downloadResult.success) {
-            return res.json({
-              success: true,
-              signedUrl: downloadResult.signedUrl,
-              expiresIn: downloadResult.expiresIn
-            });
-          } else {
-            return res.status(500).json({ error: 'Error al generar URL de descarga' });
-          }
-          
-        } catch (error) {
-          console.error('Error generating download URL:', error);
-          return res.status(500).json({ error: 'Error interno del servidor: ' + error.message });
-        }
-      }
+    console.log('📁 Documento encontrado:', doc.name);
+    console.log('🔗 file_url:', doc.file_url);
+    console.log('📝 Tipo de file_url:', typeof doc.file_url);
+    
+    // Extraer la key del file_url
+    const fileUrl = doc.file_url;
+    
+    // Verificar que file_url es un string
+    if (typeof fileUrl !== 'string') {
+      console.error('❌ file_url no es string:', fileUrl);
+      return res.status(500).json({ error: 'Formato de URL inválido' });
+    }
+    
+    // Extraer la key - manera robusta
+    const key = fileUrl.replace(/https:\/\/pub-[^\/]+\/(.+)/, '$1');
+    console.log('🔑 Key extraída:', key);
+    
+    // Generar URL firmada para descarga
+    console.log('🔄 Generando URL firmada...');
+    const downloadResult = await R2Client.generateDownloadURL(key);
+    
+    if (downloadResult.success) {
+      console.log('✅ URL firmada generada correctamente');
+      return res.json({
+        success: true,
+        signedUrl: downloadResult.signedUrl,
+        expiresIn: downloadResult.expiresIn
+      });
+    } else {
+      console.error('❌ Error generando URL firmada:', downloadResult.error);
+      return res.status(500).json({ error: 'Error al generar URL de descarga: ' + downloadResult.error });
+    }
+    
+  } catch (error) {
+    console.error('❌ Error generating download URL:', error);
+    return res.status(500).json({ error: 'Error interno del servidor: ' + error.message });
+  }
+}
       
       // 2. Búsqueda de documentos
       else if (req.query.search) {
