@@ -1,4 +1,4 @@
-// api/documents.js - VERSIÓN COMPLETA CON SUBIDA DE ARCHIVOS
+// api/documents.js - VERSIÓN CORREGIDA
 import { 
   getAllDocuments, 
   createDocument, 
@@ -10,15 +10,13 @@ import {
 import { AuthService } from '../lib/auth.js';
 import { R2Client } from '../lib/r2-client.js';
 
-// Para Vercel, necesitamos un enfoque diferente para FormData
 export const config = {
   api: {
-    bodyParser: false, // Desactivar el bodyParser por defecto
+    bodyParser: false,
   },
 };
 
 export default async function handler(req, res) {
-  // Configurar CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -28,7 +26,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Verificar autenticación
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!token) {
       return res.status(401).json({ error: 'Token de autenticación requerido' });
@@ -39,55 +36,90 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Token inválido' });
     }
 
-    // Asegurar que la tabla existe
     await initDocumentsTable();
 
-    // 👇 GET - Obtener todos los documentos
+    // 👇 GET - Múltiples funcionalidades
     if (req.method === 'GET') {
-      const { search } = req.query;
+      // 1. Generar URL firmada para descarga
+      if (req.query.download && req.query.documentId) {
+        const { documentId } = req.query;
+        
+        if (!documentId) {
+          return res.status(400).json({ error: 'ID del documento requerido' });
+        }
+
+        try {
+          // Obtener el documento de la base de datos
+          const document = await db.query(
+            `SELECT * FROM documents WHERE id = $1`,
+            [documentId]
+          );
+
+          if (document.rows.length === 0) {
+            return res.status(404).json({ error: 'Documento no encontrado' });
+          }
+
+          const docData = document.rows[0];
+          
+          // VERIFICAR: ¿Qué hay realmente en file_url?
+          console.log('🔍 file_url en base de datos:', docData.file_url);
+          console.log('🔍 Tipo de file_url:', typeof docData.file_url);
+          
+          // Extraer la key del file_url - MANERA ROBUSTA
+          let key;
+          if (typeof docData.file_url === 'string') {
+            // Si es string, extraer la key
+            const fileUrl = docData.file_url;
+            key = fileUrl.replace(`https://pub-${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.dev/`, '');
+          } else {
+            // Si es objeto, intentar extraer de diferentes formas
+            console.error('❌ file_url NO es string:', docData.file_url);
+            return res.status(500).json({ error: 'Formato de URL inválido en base de datos' });
+          }
+          
+          console.log('🔑 Key extraída:', key);
+          
+          // Generar URL firmada para descarga
+          const downloadResult = await R2Client.generateDownloadURL(key);
+          
+          if (downloadResult.success) {
+            return res.json({
+              success: true,
+              signedUrl: downloadResult.signedUrl,
+              expiresIn: downloadResult.expiresIn
+            });
+          } else {
+            return res.status(500).json({ error: 'Error al generar URL de descarga' });
+          }
+          
+        } catch (error) {
+          console.error('Error generating download URL:', error);
+          return res.status(500).json({ error: 'Error interno del servidor: ' + error.message });
+        }
+      }
       
-      if (search) {
+      // 2. Búsqueda de documentos
+      else if (req.query.search) {
+        const { search } = req.query;
         const documents = await searchDocuments(search);
         return res.json({ success: true, documents });
-      } else {
+      }
+      
+      // 3. Obtener todos los documentos
+      else {
         const documents = await getAllDocuments();
         return res.json({ success: true, documents });
       }
     }
 
-    // En api/documents.js - Añade este endpoint
-  if (req.method === 'GET' && req.query.download) {
-      const { key } = req.query;
-      
-      if (!key) {
-          return res.status(400).json({ error: 'Key del archivo requerida' });
-      }
-
-      try {
-          const downloadResult = await R2Client.generateDownloadURL(key);
-          
-          if (downloadResult.success) {
-              // Redirigir directamente a la URL firmada
-              res.redirect(downloadResult.signedUrl);
-          } else {
-              res.status(500).json({ error: 'Error generando URL de descarga' });
-          }
-      } catch (error) {
-          console.error('Error generating download URL:', error);
-          res.status(500).json({ error: error.message });
-      }
-  }
-
     // 👇 POST - Crear nuevo documento CON ARCHIVO
     if (req.method === 'POST') {
-      // Manejar FormData manualmente
       const formData = await parseFormData(req);
       
       if (!formData.file) {
         return res.status(400).json({ error: 'Archivo requerido' });
       }
 
-      // Parsear los datos del documento
       let documentData;
       try {
         documentData = JSON.parse(formData.document);
@@ -95,33 +127,53 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Formato de datos inválido' });
       }
 
-      // Validaciones básicas
       if (!documentData.name || !documentData.brand || !documentData.model) {
         return res.status(400).json({ error: 'Nombre, marca y modelo son obligatorios' });
       }
 
-      // Validar tipo de archivo
       const allowedTypes = ['application/pdf', 'application/msword', 
                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
       if (!allowedTypes.includes(formData.file.type)) {
         return res.status(400).json({ error: 'Tipo de archivo no permitido. Solo PDF, DOC y DOCX.' });
       }
 
-      // Validar tamaño (250MB máximo)
       if (formData.file.size > 250 * 1024 * 1024) {
         return res.status(400).json({ error: 'Archivo demasiado grande (máximo 250MB)' });
       }
 
       try {
-        // 1. Subir archivo a R2
-        const fileUrl = await R2Client.uploadDocument(formData.file, Date.now().toString());
-        const url = fileUrl.url
+        // 1. Subir archivo a R2 - MANERA CORREGIDA
+        console.log('📤 Subiendo archivo a R2...');
+        const uploadResult = await R2Client.uploadDocument(formData.file, Date.now().toString());
+        
+        // DEBUG: Ver qué devuelve realmente uploadDocument
+        console.log('📄 Resultado de uploadDocument:', uploadResult);
+        console.log('📄 Tipo de resultado:', typeof uploadResult);
+        
+        // MANEJO ROBUSTO DEL RESULTADO
+        let fileUrl;
+        if (typeof uploadResult === 'string') {
+          // Si devuelve directamente la URL string
+          fileUrl = uploadResult;
+        } else if (uploadResult && typeof uploadResult === 'object') {
+          // Si devuelve un objeto con propiedad url
+          fileUrl = uploadResult.url || uploadResult.fileUrl;
+        } else {
+          throw new Error('Resultado de uploadDocument no válido: ' + JSON.stringify(uploadResult));
+        }
+        
+        // Validar que fileUrl es un string
+        if (typeof fileUrl !== 'string') {
+          throw new Error('URL del archivo no es un string: ' + typeof fileUrl);
+        }
+        
+        console.log('✅ URL final para guardar en BD:', fileUrl);
 
         // 2. Crear documento en la base de datos
         const newDocument = await createDocument({
           ...documentData,
           file_name: formData.file.name,
-          file_url: url,
+          file_url: fileUrl, // ✅ GUARDAR STRING, NO OBJETO
           file_size: formData.file.size,
           file_type: formData.file.type,
           uploaded_by: user.id
@@ -134,12 +186,12 @@ export default async function handler(req, res) {
         });
 
       } catch (uploadError) {
-        console.error('Error subiendo a R2:', uploadError);
+        console.error('❌ Error subiendo a R2:', uploadError);
         return res.status(500).json({ error: 'Error al subir el archivo: ' + uploadError.message });
       }
     }
 
-    // 👇 PUT - Actualizar documento (solo metadata, sin archivo)
+    // 👇 PUT - Actualizar documento
     if (req.method === 'PUT') {
       const { id, ...updates } = req.body;
       
@@ -171,7 +223,7 @@ export default async function handler(req, res) {
   }
 }
 
-// Función para parsear FormData en Vercel
+// Función para parsear FormData (sin cambios)
 async function parseFormData(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -184,7 +236,6 @@ async function parseFormData(req) {
 
     req.on('end', () => {
       try {
-        // Parsear el boundary del Content-Type
         const contentType = req.headers['content-type'];
         const boundary = contentType.split('boundary=')[1];
         
@@ -193,7 +244,6 @@ async function parseFormData(req) {
           return;
         }
 
-        // Parsear manualmente el FormData
         const parts = body.split(`--${boundary}`);
         const result = {};
 
@@ -208,7 +258,6 @@ async function parseFormData(req) {
               const value = part.split('\r\n\r\n')[1]?.split('\r\n--')[0]?.trim();
 
               if (filenameMatch) {
-                // Es un archivo
                 const filename = filenameMatch[1];
                 result.file = {
                   name: filename,
@@ -217,7 +266,6 @@ async function parseFormData(req) {
                   buffer: Buffer.from(value)
                 };
               } else {
-                // Es un campo normal
                 result[name] = value;
               }
             }
@@ -233,4 +281,3 @@ async function parseFormData(req) {
     req.on('error', reject);
   });
 }
-
