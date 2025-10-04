@@ -81,7 +81,11 @@ if (req.method === 'GET' && req.query.download && req.query.documentId) {
     // Extraer la key - manera robusta
     const key = fileUrl.replace(/https:\/\/pub-[^\/]+\/(.+)/, '$1');
     console.log('🔑 Key extraída:', key);
-    
+    console.log('🔧 Configuración R2:');
+    console.log('🔧 Account ID:', process.env.CLOUDFLARE_ACCOUNT_ID);
+    console.log('🔧 Bucket Name:', process.env.R2_BUCKET_NAME);
+    console.log('🔧 Access Key ID:', process.env.R2_ACCESS_KEY_ID ? '✅ Presente' : '❌ Faltante');
+    console.log('🔧 Secret Access Key:', process.env.R2_SECRET_ACCESS_KEY ? '✅ Presente' : '❌ Faltante');
     // Generar URL firmada para descarga
     console.log('🔄 Generando URL firmada...');
     const downloadResult = await R2Client.generateDownloadURL(key);
