@@ -118,83 +118,92 @@ export default async function handler(req, res) {
     }
 
     // 👇 POST - Crear nuevo documento CON ARCHIVO
-    if (req.method === 'POST') {
-      const formData = await parseFormData(req);
-      
-      if (!formData.file) {
-        return res.status(400).json({ error: 'Archivo requerido' });
-      }
+   if (req.method === 'POST') {
+  console.log('📤 POST request received');
+  
+  // Usar parseFormData corregido que mantiene buffers
+  const formData = await parseFormData(req);
+  
+  if (!formData.file) {
+    return res.status(400).json({ error: 'Archivo requerido' });
+  }
 
-      let documentData;
-      try {
-        documentData = JSON.parse(formData.document);
-      } catch (error) {
-        return res.status(400).json({ error: 'Formato de datos inválido' });
-      }
+  // Verificar que tenemos un buffer válido
+  if (!Buffer.isBuffer(formData.file.buffer)) {
+    console.error('❌ El archivo no tiene un buffer válido');
+    return res.status(400).json({ error: 'Archivo corrupto o inválido' });
+  }
 
-      if (!documentData.name || !documentData.brand || !documentData.model) {
-        return res.status(400).json({ error: 'Nombre, marca y modelo son obligatorios' });
-      }
+  console.log('📄 File received:', {
+    name: formData.file.name,
+    type: formData.file.type,
+    size: formData.file.size,
+    bufferSize: formData.file.buffer.length,
+    isBuffer: Buffer.isBuffer(formData.file.buffer)
+  });
 
-      const allowedTypes = ['application/pdf', 'application/msword', 
-                           'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-      if (!allowedTypes.includes(formData.file.type)) {
-        return res.status(400).json({ error: 'Tipo de archivo no permitido. Solo PDF, DOC y DOCX.' });
-      }
-
-      if (formData.file.size > 250 * 1024 * 1024) {
-        return res.status(400).json({ error: 'Archivo demasiado grande (máximo 250MB)' });
-      }
-
-      try {
-        // 1. Subir archivo a R2 - MANERA CORREGIDA
-        console.log('📤 Subiendo archivo a R2...');
-        const uploadResult = await R2Client.uploadDocument(formData.file, Date.now().toString());
-        
-        // DEBUG: Ver qué devuelve realmente uploadDocument
-        console.log('📄 Resultado de uploadDocument:', uploadResult);
-        console.log('📄 Tipo de resultado:', typeof uploadResult);
-        
-        // MANEJO ROBUSTO DEL RESULTADO
-        let fileUrl;
-        if (typeof uploadResult === 'string') {
-          // Si devuelve directamente la URL string
-          fileUrl = uploadResult;
-        } else if (uploadResult && typeof uploadResult === 'object') {
-          // Si devuelve un objeto con propiedad url
-          fileUrl = uploadResult.url || uploadResult.fileUrl;
-        } else {
-          throw new Error('Resultado de uploadDocument no válido: ' + JSON.stringify(uploadResult));
-        }
-        
-        // Validar que fileUrl es un string
-        if (typeof fileUrl !== 'string') {
-          throw new Error('URL del archivo no es un string: ' + typeof fileUrl);
-        }
-        
-        console.log('✅ URL final para guardar en BD:', fileUrl);
-
-        // 2. Crear documento en la base de datos
-        const newDocument = await createDocument({
-          ...documentData,
-          file_name: formData.file.name,
-          file_url: fileUrl, // ✅ GUARDAR STRING, NO OBJETO
-          file_size: formData.file.size,
-          file_type: formData.file.type,
-          uploaded_by: user.id
-        });
-
-        return res.status(201).json({ 
-          success: true, 
-          document: newDocument,
-          message: 'Documento subido exitosamente a Cloudflare R2'
-        });
-
-      } catch (uploadError) {
-        console.error('❌ Error subiendo a R2:', uploadError);
-        return res.status(500).json({ error: 'Error al subir el archivo: ' + uploadError.message });
-      }
+  // Para PDFs, verificar integridad
+  if (formData.file.type === 'application/pdf') {
+    const pdfHeader = formData.file.buffer.slice(0, 4).toString('ascii');
+    console.log('PDF Header check:', pdfHeader);
+    if (pdfHeader !== '%PDF') {
+      console.warn('⚠️ El archivo no parece ser un PDF válido');
     }
+  }
+
+  let documentData;
+  try {
+    documentData = JSON.parse(formData.document);
+  } catch (error) {
+    return res.status(400).json({ error: 'Formato de datos inválido' });
+  }
+
+  if (!documentData.name || !documentData.brand || !documentData.model) {
+    return res.status(400).json({ error: 'Nombre, marca y modelo son obligatorios' });
+  }
+
+  const allowedTypes = [
+    'application/pdf', 
+    'application/msword', 
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ];
+  
+  if (!allowedTypes.includes(formData.file.type)) {
+    return res.status(400).json({ error: 'Tipo de archivo no permitido. Solo PDF, DOC y DOCX.' });
+  }
+
+  if (formData.file.size > 250 * 1024 * 1024) {
+    return res.status(400).json({ error: 'Archivo demasiado grande (máximo 250MB)' });
+  }
+
+  try {
+    // Subir archivo a R2 con el buffer preservado
+    console.log('🔤 Uploading to R2...');
+    const fileUrl = await R2Client.uploadDocument(formData.file, Date.now().toString());
+    
+    console.log('✅ File uploaded successfully:', fileUrl);
+
+    // Crear documento en la base de datos
+    const newDocument = await createDocument({
+      ...documentData,
+      file_name: formData.file.name,
+      file_url: fileUrl,
+      file_size: formData.file.size,
+      file_type: formData.file.type,
+      uploaded_by: user.id
+    });
+
+    return res.status(201).json({ 
+      success: true, 
+      document: newDocument,
+      message: 'Documento subido exitosamente a Cloudflare R2'
+    });
+
+  } catch (uploadError) {
+    console.error('❌ Error subiendo a R2:', uploadError);
+    return res.status(500).json({ error: 'Error al subir el archivo: ' + uploadError.message });
+  }
+}
 
     // 👇 PUT - Actualizar documento
     if (req.method === 'PUT') {
@@ -295,6 +304,14 @@ async function parseFormData(req) {
                   size: content.length,
                   buffer: content // ✅ Buffer sin corromper
                 };
+                
+                console.log('📎 File parsed:', {
+                  name: filename,
+                  type: result.file.type,
+                  bufferSize: content.length,
+                  isBuffer: Buffer.isBuffer(content),
+                  first10Bytes: content.slice(0, 10).toString('hex')
+                });
               } else {
                 // Es un campo de texto - convertir a string
                 result[name] = content.toString('utf-8').trim();
@@ -312,6 +329,27 @@ async function parseFormData(req) {
     req.on('error', reject);
   });
 }
+
+// Función auxiliar para dividir un Buffer por un delimitador
+function splitBuffer(buffer, delimiter) {
+  const parts = [];
+  let start = 0;
+  let index;
+  
+  while ((index = findSequence(buffer, delimiter, start)) !== -1) {
+    if (index > start) {
+      parts.push(buffer.slice(start, index));
+    }
+    start = index + delimiter.length;
+  }
+  
+  if (start < buffer.length) {
+    parts.push(buffer.slice(start));
+  }
+  
+  return parts;
+}
+
 
 // Función auxiliar para dividir un Buffer por un delimitador
 function splitBuffer(buffer, delimiter) {
