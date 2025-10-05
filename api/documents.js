@@ -350,27 +350,6 @@ function splitBuffer(buffer, delimiter) {
   return parts;
 }
 
-
-// Función auxiliar para dividir un Buffer por un delimitador
-function splitBuffer(buffer, delimiter) {
-  const parts = [];
-  let start = 0;
-  let index;
-  
-  while ((index = findSequence(buffer, delimiter, start)) !== -1) {
-    if (index > start) {
-      parts.push(buffer.slice(start, index));
-    }
-    start = index + delimiter.length;
-  }
-  
-  if (start < buffer.length) {
-    parts.push(buffer.slice(start));
-  }
-  
-  return parts;
-}
-
 // Función auxiliar para buscar una secuencia en un Buffer
 function findSequence(buffer, sequence, start = 0) {
   for (let i = start; i <= buffer.length - sequence.length; i++) {
