@@ -77,7 +77,10 @@ export default async function handler(req, res) {
       
       // Extraer la key del file_url
       const fileUrl = doc.file_url;
-      const key = fileUrl.replace(/https:\/\/pub-[^\/]+\/(.+)/, '$1');
+      let url = fileUrl.slice(0, url.lastIndexOf('/') + 1);
+      url = url + doc.file_name;
+      console.log('🌐 URL completa del archivo:', url);
+      const key = url.replace(/https:\/\/pub-[^\/]+\/(.+)/, '$1');
       console.log('🔑 Key extraída:', key);
       
       // Generar URL firmada para descarga
