@@ -232,16 +232,15 @@ export default async function handler(req, res) {
 async function parseFormData(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
+    let body = '';
 
     req.on('data', chunk => {
       chunks.push(chunk);
+      body += chunk.toString();
     });
 
     req.on('end', () => {
       try {
-        // Concatenar todos los chunks en un solo Buffer
-        const buffer = Buffer.concat(chunks);
-        
         const contentType = req.headers['content-type'];
         const boundary = contentType.split('boundary=')[1];
         
@@ -250,54 +249,29 @@ async function parseFormData(req) {
           return;
         }
 
-        // Trabajar directamente con el Buffer
-        const boundaryBuffer = Buffer.from(`--${boundary}`);
-        const parts = splitBuffer(buffer, boundaryBuffer);
+        const parts = body.split(`--${boundary}`);
         const result = {};
 
         for (const part of parts) {
-          // Buscar Content-Disposition en el buffer
-          const headerEndIndex = findSequence(part, Buffer.from('\r\n\r\n'));
-          
-          if (headerEndIndex === -1) continue;
-          
-          // Extraer headers como string (esto sí es texto)
-          const headers = part.slice(0, headerEndIndex).toString('utf-8');
-          
-          if (headers.includes('Content-Disposition')) {
-            const nameMatch = headers.match(/name="([^"]+)"/);
-            const filenameMatch = headers.match(/filename="([^"]+)"/);
-            const contentTypeMatch = headers.match(/Content-Type:\s*([^\r\n]+)/);
+          if (part.includes('Content-Disposition')) {
+            const nameMatch = part.match(/name="([^"]+)"/);
+            const filenameMatch = part.match(/filename="([^"]+)"/);
+            const contentTypeMatch = part.match(/Content-Type:\s*([^\r\n]+)/);
 
             if (nameMatch) {
               const name = nameMatch[1];
-              
-              // El contenido empieza después de \r\n\r\n
-              const contentStart = headerEndIndex + 4;
-              
-              // Buscar el final del contenido (antes del próximo boundary o final)
-              let contentEnd = part.length;
-              const endSequence = Buffer.from('\r\n--');
-              const endIndex = findSequence(part, endSequence, contentStart);
-              if (endIndex !== -1) {
-                contentEnd = endIndex;
-              }
-              
-              // Extraer el contenido como Buffer
-              const content = part.slice(contentStart, contentEnd);
+              const value = part.split('\r\n\r\n')[1]?.split('\r\n--')[0]?.trim();
 
               if (filenameMatch) {
-                // Es un archivo - mantener como Buffer
                 const filename = filenameMatch[1];
                 result.file = {
                   name: filename,
                   type: contentTypeMatch ? contentTypeMatch[1] : 'application/octet-stream',
-                  size: content.length,
-                  buffer: content // ✅ Buffer sin corromper
+                  size: Buffer.from(value).length,
+                  buffer: Buffer.from(value)
                 };
               } else {
-                // Es un campo de texto - convertir a string
-                result[name] = content.toString('utf-8').trim();
+                result[name] = value;
               }
             }
           }
@@ -311,39 +285,4 @@ async function parseFormData(req) {
 
     req.on('error', reject);
   });
-}
-
-// Función auxiliar para dividir un Buffer por un delimitador
-function splitBuffer(buffer, delimiter) {
-  const parts = [];
-  let start = 0;
-  let index;
-  
-  while ((index = findSequence(buffer, delimiter, start)) !== -1) {
-    if (index > start) {
-      parts.push(buffer.slice(start, index));
-    }
-    start = index + delimiter.length;
-  }
-  
-  if (start < buffer.length) {
-    parts.push(buffer.slice(start));
-  }
-  
-  return parts;
-}
-
-// Función auxiliar para buscar una secuencia en un Buffer
-function findSequence(buffer, sequence, start = 0) {
-  for (let i = start; i <= buffer.length - sequence.length; i++) {
-    let found = true;
-    for (let j = 0; j < sequence.length; j++) {
-      if (buffer[i + j] !== sequence[j]) {
-        found = false;
-        break;
-      }
-    }
-    if (found) return i;
-  }
-  return -1;
 }
