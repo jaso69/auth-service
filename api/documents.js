@@ -207,7 +207,7 @@ export default async function handler(req, res) {
         if (typeof fileUrl !== 'string') {
           throw new Error('uploadDocument no devolvió una URL válida');
         }
-
+        
         // Crear documento en la base de datos
         const newDocument = await createDocument({
           ...documentData,
