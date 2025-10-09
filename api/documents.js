@@ -117,9 +117,45 @@ export default async function handler(req, res) {
       }
     }
 
-    // 👇 POST - Crear nuevo documento CON ARCHIVO
+    // 👇 POST - Crear nuevo documento
+    // Soporta dos flujos:
+    // 1) application/json con file_url ya subido (presigned upload desde el cliente)
+    // 2) multipart/form-data con archivo incluido (para uso local o sin Vercel)
     if (req.method === 'POST') {
       try {
+        const contentType = req.headers['content-type'] || '';
+
+        // 1) JSON: solo metadatos + file_url
+        if (contentType.includes('application/json')) {
+          const body = await readJsonBody(req);
+          const { name, brand, model, file_url, file_name, file_size, file_type } = body || {};
+
+          if (!name || !brand || !model) {
+            return res.status(400).json({ error: 'Nombre, marca y modelo son obligatorios' });
+          }
+          if (!file_url) {
+            return res.status(400).json({ error: 'file_url es obligatorio (sube el archivo con URL firmada primero)' });
+          }
+
+          const newDocument = await createDocument({
+            name,
+            brand,
+            model,
+            file_url,
+            file_name: file_name || null,
+            file_size: file_size || null,
+            file_type: file_type || null,
+            uploaded_by: user.id
+          });
+
+          return res.status(201).json({
+            success: true,
+            document: newDocument,
+            message: 'Documento registrado correctamente (presigned upload)'
+          });
+        }
+
+        // 2) multipart/form-data: incluye archivo (no apto para Vercel en archivos grandes)
         const formData = await parseFormData(req);
         
         if (!formData.file) {
