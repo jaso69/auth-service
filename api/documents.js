@@ -349,3 +349,31 @@ async function parseFormData(req) {
     req.on('error', reject);
   });
 }
+
+// Función para leer el cuerpo JSON de la petición
+async function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    
+    req.on('data', chunk => {
+      chunks.push(chunk);
+    });
+    
+    req.on('end', () => {
+      try {
+        const body = Buffer.concat(chunks).toString('utf8');
+        if (!body.trim()) {
+          resolve({});
+          return;
+        }
+        const parsed = JSON.parse(body);
+        resolve(parsed);
+      } catch (error) {
+        console.error('❌ Error parseando JSON:', error);
+        reject(new Error('Formato JSON inválido'));
+      }
+    });
+    
+    req.on('error', reject);
+  });
+}
