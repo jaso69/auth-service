@@ -119,66 +119,64 @@ export default async function handler(req, res) {
 
     // 👇 POST - Crear nuevo documento CON ARCHIVO
     if (req.method === 'POST') {
-      const formData = await parseFormData(req);
-      
-      if (!formData.file) {
-        return res.status(400).json({ error: 'Archivo requerido' });
-      }
-
-      let documentData;
       try {
-        documentData = JSON.parse(formData.document);
-      } catch (error) {
-        return res.status(400).json({ error: 'Formato de datos inválido' });
-      }
+        const formData = await parseFormData(req);
+        
+        if (!formData.file) {
+          return res.status(400).json({ error: 'Archivo requerido' });
+        }
 
-      if (!documentData.name || !documentData.brand || !documentData.model) {
-        return res.status(400).json({ error: 'Nombre, marca y modelo son obligatorios' });
-      }
+        console.log('📁 Archivo recibido:', {
+          name: formData.file.name,
+          type: formData.file.type,
+          size: formData.file.size
+        });
 
-      const allowedTypes = ['application/pdf', 'application/msword', 
-                           'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-      if (!allowedTypes.includes(formData.file.type)) {
-        return res.status(400).json({ error: 'Tipo de archivo no permitido. Solo PDF, DOC y DOCX.' });
-      }
+        let documentData;
+        try {
+          documentData = JSON.parse(formData.document);
+        } catch (error) {
+          return res.status(400).json({ error: 'Formato de datos inválido' });
+        }
 
-      if (formData.file.size > 250 * 1024 * 1024) {
-        return res.status(400).json({ error: 'Archivo demasiado grande (máximo 250MB)' });
-      }
+        if (!documentData.name || !documentData.brand || !documentData.model) {
+          return res.status(400).json({ error: 'Nombre, marca y modelo son obligatorios' });
+        }
 
-      try {
-        // 1. Subir archivo a R2 - MANERA CORREGIDA
+        const allowedTypes = ['application/pdf', 'application/msword', 
+                             'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+        if (!allowedTypes.includes(formData.file.type)) {
+          return res.status(400).json({ error: 'Tipo de archivo no permitido. Solo PDF, DOC y DOCX.' });
+        }
+
+        if (formData.file.size > 250 * 1024 * 1024) {
+          return res.status(400).json({ error: 'Archivo demasiado grande (máximo 250MB)' });
+        }
+
+        // Preparar el archivo para R2Client (agregar propiedades necesarias)
+        const fileForUpload = {
+          name: formData.file.name,
+          buffer: formData.file.buffer,
+          size: formData.file.size,
+          mimetype: formData.file.type
+        };
+
+        // Subir archivo a R2
         console.log('📤 Subiendo archivo a R2...');
-        const uploadResult = await R2Client.uploadDocument(formData.file, Date.now().toString());
+        const fileUrl = await R2Client.uploadDocument(fileForUpload, Date.now().toString());
         
-        // DEBUG: Ver qué devuelve realmente uploadDocument
-        console.log('📄 Resultado de uploadDocument:', uploadResult);
-        console.log('📄 Tipo de resultado:', typeof uploadResult);
+        console.log('✅ URL recibida de R2:', fileUrl);
+        console.log('✅ Tipo de URL:', typeof fileUrl);
         
-        // MANEJO ROBUSTO DEL RESULTADO
-        let fileUrl;
-        if (typeof uploadResult === 'string') {
-          // Si devuelve directamente la URL string
-          fileUrl = uploadResult;
-        } else if (uploadResult && typeof uploadResult === 'object') {
-          // Si devuelve un objeto con propiedad url
-          fileUrl = uploadResult.url || uploadResult.fileUrl;
-        } else {
-          throw new Error('Resultado de uploadDocument no válido: ' + JSON.stringify(uploadResult));
-        }
-        
-        // Validar que fileUrl es un string
         if (typeof fileUrl !== 'string') {
-          throw new Error('URL del archivo no es un string: ' + typeof fileUrl);
+          throw new Error('uploadDocument no devolvió una URL válida');
         }
-        
-        console.log('✅ URL final para guardar en BD:', fileUrl);
 
-        // 2. Crear documento en la base de datos
+        // Crear documento en la base de datos
         const newDocument = await createDocument({
           ...documentData,
           file_name: formData.file.name,
-          file_url: fileUrl, // ✅ GUARDAR STRING, NO OBJETO
+          file_url: fileUrl,
           file_size: formData.file.size,
           file_type: formData.file.type,
           uploaded_by: user.id
@@ -191,8 +189,11 @@ export default async function handler(req, res) {
         });
 
       } catch (uploadError) {
-        console.error('❌ Error subiendo a R2:', uploadError);
-        return res.status(500).json({ error: 'Error al subir el archivo: ' + uploadError.message });
+        console.error('❌ Error en POST /documents:', uploadError);
+        return res.status(500).json({ 
+          error: 'Error al subir el archivo', 
+          details: uploadError.message 
+        });
       }
     }
 
@@ -228,57 +229,83 @@ export default async function handler(req, res) {
   }
 }
 
-// Función para parsear FormData (sin cambios)
+// Función para parsear FormData
 async function parseFormData(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    let body = '';
 
     req.on('data', chunk => {
       chunks.push(chunk);
-      body += chunk.toString();
     });
 
     req.on('end', () => {
       try {
+        const buffer = Buffer.concat(chunks);
         const contentType = req.headers['content-type'];
-        const boundary = contentType.split('boundary=')[1];
         
-        if (!boundary) {
-          reject(new Error('No boundary found in Content-Type'));
+        if (!contentType || !contentType.includes('multipart/form-data')) {
+          reject(new Error('Content-Type debe ser multipart/form-data'));
           return;
         }
 
-        const parts = body.split(`--${boundary}`);
+        const boundaryMatch = contentType.match(/boundary=(.+)$/);
+        if (!boundaryMatch) {
+          reject(new Error('No se encontró boundary en Content-Type'));
+          return;
+        }
+
+        const boundary = boundaryMatch[1];
+        const boundaryBuffer = Buffer.from(`--${boundary}`);
         const result = {};
 
+        // Dividir el buffer por el boundary
+        let position = 0;
+        const parts = [];
+        
+        while (position < buffer.length) {
+          const boundaryIndex = buffer.indexOf(boundaryBuffer, position);
+          if (boundaryIndex === -1) break;
+          
+          const nextBoundaryIndex = buffer.indexOf(boundaryBuffer, boundaryIndex + boundaryBuffer.length);
+          if (nextBoundaryIndex === -1) break;
+          
+          parts.push(buffer.slice(boundaryIndex + boundaryBuffer.length, nextBoundaryIndex));
+          position = nextBoundaryIndex;
+        }
+
+        // Procesar cada parte
         for (const part of parts) {
-          if (part.includes('Content-Disposition')) {
-            const nameMatch = part.match(/name="([^"]+)"/);
-            const filenameMatch = part.match(/filename="([^"]+)"/);
-            const contentTypeMatch = part.match(/Content-Type:\s*([^\r\n]+)/);
+          const headerEndIndex = part.indexOf(Buffer.from('\r\n\r\n'));
+          if (headerEndIndex === -1) continue;
 
-            if (nameMatch) {
-              const name = nameMatch[1];
-              const value = part.split('\r\n\r\n')[1]?.split('\r\n--')[0]?.trim();
+          const headers = part.slice(0, headerEndIndex).toString();
+          const content = part.slice(headerEndIndex + 4, part.length - 2); // -2 para quitar \r\n final
 
-              if (filenameMatch) {
-                const filename = filenameMatch[1];
-                result.file = {
-                  name: filename,
-                  type: contentTypeMatch ? contentTypeMatch[1] : 'application/octet-stream',
-                  size: Buffer.from(value).length,
-                  buffer: Buffer.from(value)
-                };
-              } else {
-                result[name] = value;
-              }
+          const nameMatch = headers.match(/name="([^"]+)"/);
+          const filenameMatch = headers.match(/filename="([^"]+)"/);
+          const contentTypeMatch = headers.match(/Content-Type:\s*([^\r\n]+)/);
+
+          if (nameMatch) {
+            const name = nameMatch[1];
+
+            if (filenameMatch) {
+              // Es un archivo
+              result.file = {
+                name: filenameMatch[1],
+                type: contentTypeMatch ? contentTypeMatch[1].trim() : 'application/octet-stream',
+                size: content.length,
+                buffer: content
+              };
+            } else {
+              // Es un campo de texto
+              result[name] = content.toString('utf8');
             }
           }
         }
 
         resolve(result);
       } catch (error) {
+        console.error('❌ Error parseando FormData:', error);
         reject(error);
       }
     });
