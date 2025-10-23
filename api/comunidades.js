@@ -1,4 +1,4 @@
-import { AuthService } from '../../lib/auth.js';
+import { AuthService } from '../lib/auth.js';
 import { getAllComunidades, getComunidadByNumero } from '../../lib/db.js';
 
 export default async function handler(req, res) {
