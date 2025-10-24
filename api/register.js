@@ -45,6 +45,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
     }
 
+    if(!email.includes('jmfortiz.com')) {
+      return res.status(400).json({ error: 'El email no es valido' });
+    }
+
     const result = await AuthService.register(email, password, { name });
 
     console.log('🔍 DEBUG - verificationCode:', result.verificationCode);
