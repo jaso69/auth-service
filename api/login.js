@@ -15,7 +15,6 @@ async function ensureDBInitialized() {
 }
 
 export default async function handler(req, res) {
-  console.log('🔍 Login endpoint llamado');
   
   try {
     // Habilitar CORS
@@ -51,8 +50,6 @@ export default async function handler(req, res) {
     res.setHeader('Set-Cookie', [
       `token=${result.token}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax; ${isProduction ? 'Secure;' : ''}`
     ]);
-
-    console.log('✅ Login exitoso para:', email);
 
     res.status(200).json({
       success: true,

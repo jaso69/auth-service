@@ -2,7 +2,6 @@
 import { AuthService } from '../lib/auth.js';
 
 export default async function handler(req, res) {
-  console.log('🔍 Verify-code endpoint llamado');
   
   try {
     res.setHeader('Access-Control-Allow-Origin', '*');

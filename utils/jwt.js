@@ -9,7 +9,6 @@ if (!JWT_SECRET) {
 }
 
 export function generateToken(payload) {
-  console.log('🔧 Generando token con secret length:', JWT_SECRET?.length);
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: '7d'
   });
@@ -17,9 +16,7 @@ export function generateToken(payload) {
 
 export function verifyToken(token) {
   try {
-    console.log('🔧 Verificando token con secret length:', JWT_SECRET?.length);
     const decoded = jwt.verify(token, JWT_SECRET);
-    console.log('✅ Token verificado correctamente');
     return decoded;
   } catch (error) {
     console.error('❌ Error en verifyToken:', error.message);

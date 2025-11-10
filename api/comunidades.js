@@ -29,8 +29,6 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Token inválido' });
     }
 
-    console.log(`🔧 Usuario autenticado: ${user.email} (${user.rol})`);
-
     // Verificar que el usuario esté verificado
     if (!user.is_verified) {
       return res.status(403).json({ 

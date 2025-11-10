@@ -8,7 +8,6 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
     
     if (req.method === 'OPTIONS') {
-        console.log('🔄 Preflight OPTIONS recibido');
         return res.status(200).end();
     }
     
@@ -17,9 +16,6 @@ export default async function handler(req, res) {
     }
     
     try {
-        console.log('🔧 Endpoint updateRol llamado');
-        console.log('📨 Headers recibidos:', req.headers);
-        
         // Extraer token de múltiples formas
         let token = null;
         const authHeader = req.headers.authorization;
@@ -30,23 +26,16 @@ export default async function handler(req, res) {
             token = authHeader; // Por si acaso viene sin 'Bearer '
         }
         
-        console.log('🔐 Token recibido:', token ? `Sí (longitud: ${token.length})` : 'No');
-        
         if (!token) {
-            console.log('❌ Token no proporcionado en headers');
             return res.status(401).json({ error: 'Token no proporcionado' });
         }
 
         // Verificar usuario
-        console.log('🔍 Verificando token...');
         const user = await AuthService.verifyAndExtractUser(token);
-        console.log('✅ Usuario verificado:', user.email);
         
         // Parsear body
         const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
         const { rol, email } = body;
-
-        console.log('📝 Body recibido:', body);
 
         if (!rol) {
             return res.status(400).json({ error: 'Rol requerido' });
@@ -69,12 +58,9 @@ export default async function handler(req, res) {
 
         // Usar el ID del usuario autenticado
         const userId = userToUpdate.id;
-        console.log(`🔄 Actualizando rol del usuario ${userId} a ${rol}`);
         
         // Actualizar rol
         const updatedUser = await updateUserRole(userId, rol);
-        
-        console.log('✅ Rol actualizado correctamente');
         
         res.status(200).json({ 
             success: true, 

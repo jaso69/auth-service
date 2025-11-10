@@ -1,7 +1,6 @@
 import { AuthService } from '../lib/auth.js';
 
 export default async function handler(req, res) {
-  console.log('🔍 Profile endpoint llamado');
   
   try {
     // Habilitar CORS
@@ -24,8 +23,6 @@ export default async function handler(req, res) {
                   ? req.headers.authorization.substring(7) 
                   : req.headers.authorization);
 
-    console.log('🔑 Token recibido:', token ? `${token.substring(0, 20)}...` : 'NO TOKEN');
-
     if (!token) {
       return res.status(401).json({ 
         success: false,
@@ -34,9 +31,7 @@ export default async function handler(req, res) {
     }
 
     // 👇 DEBUG EXTENDIDO
-    console.log('🔧 Llamando a AuthService.verifyAndExtractUser...');
     const user = await AuthService.verifyAndExtractUser(token);
-    console.log('✅ AuthService retornó:', user ? `usuario ${user.email}` : 'NULL');
     
     if (!user) {
       throw new Error('Usuario es null después de verifyAndExtractUser');
@@ -52,8 +47,6 @@ export default async function handler(req, res) {
       createdAt: user.created_at     // ✅ Usar snake_case del objeto user
     };
 
-    console.log('✅ Perfil enviado para:', user.email);
-
     res.status(200).json({
       success: true,
       message: 'Perfil obtenido correctamente',
@@ -61,8 +54,6 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('❌ Error COMPLETO en profile endpoint:', error);
-    console.error('❌ Stack:', error.stack);
     
     res.status(401).json({ 
       success: false,

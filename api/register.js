@@ -16,7 +16,6 @@ async function ensureDBInitialized() {
 }
 
 export default async function handler(req, res) {
-  console.log('🔍 Register endpoint llamado');
   
   try {
     // Habilitar CORS
@@ -51,17 +50,12 @@ export default async function handler(req, res) {
 
     const result = await AuthService.register(email, password, { name });
 
-    console.log('🔍 DEBUG - verificationCode:', result.verificationCode);
-
     let emailSent = false;
     if (result.verificationCode) {
-      console.log('📧 INICIANDO envío de email...');
       try {
         await EmailService.sendVerificationEmail(email, result.verificationCode, name);
-        console.log('✅ Email de verificación enviado exitosamente');
         emailSent = true;
       } catch (error) {
-        console.error('❌ Error CRÍTICO enviando email:', error.message);
         emailSent = false;
       }
     }
@@ -70,8 +64,6 @@ export default async function handler(req, res) {
     res.setHeader('Set-Cookie', [
       `token=${result.token}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax; ${isProduction ? 'Secure;' : ''}`
     ]);
-
-    console.log('✅ Registro completado. Email enviado:', emailSent);
 
     res.status(201).json({
       success: true,
